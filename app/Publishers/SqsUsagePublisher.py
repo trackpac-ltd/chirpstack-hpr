@@ -25,7 +25,7 @@ def publish_to_sqs(event):
     try:
         response = sqs_client.send_message(
             QueueUrl=queue_url,
-            MessageBody=json.dumps(event),
+            MessageBody=json.dumps(event, default=str),
             MessageDeduplicationId=dedup_id,
             MessageGroupId='HeliumUsageEvents'
         )
