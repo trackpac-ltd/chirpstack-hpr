@@ -13,8 +13,8 @@ def publish_to_http(usage_event: dict):
     event = tenant_usage_pb2.TenantUsage()
     event.datetime = usage_event['datetime']
     event.dev_eui = usage_event['dev_eui']
-    event.tenant_id = usage_event['tenant_id']
-    event.application_id = usage_event['application_id']
+    event.tenant_id = str(usage_event['tenant_id'])
+    event.application_id = str(usage_event['application_id'])
     event.dc_used = usage_event['dc_used']
     payload = event.SerializeToString()
 
