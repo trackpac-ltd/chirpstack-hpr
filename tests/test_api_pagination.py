@@ -36,15 +36,15 @@ class PaginationTests(unittest.IsolatedAsyncioTestCase):
         offsets = [call.args[0].offset for call in client.List.call_args_list]
         self.assertEqual(offsets, [0, 1000, 2000])
 
-    async def test_stops_on_empty_result_even_if_total_count_is_wrong(self):
+    async def test_incomplete_listing_raises_instead_of_returning_partial_inventory(self):
         client = AsyncMock()
         client.List.side_effect = [devices_page([], 2500)]
         with patch.object(hpr_api.api, "DeviceServiceStub", return_value=client), patch.object(
             hpr_api, "_get_channel", AsyncMock(return_value=None)
         ):
-            result = await hpr_api.get_application_devices("app-id")
+            with self.assertRaisesRegex(RuntimeError, "incomplete listing"):
+                await hpr_api.get_application_devices("app-id")
 
-        self.assertEqual(result, [])
         self.assertEqual(client.List.call_count, 1)
 
     async def test_single_page_under_the_limit(self):
