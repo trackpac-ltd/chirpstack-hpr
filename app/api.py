@@ -67,40 +67,58 @@ async def get_device_euis(dev_eui) -> int | int:
 # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 #  Functions for database device sync
 # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+PAGE_SIZE = 1000
+
+
+async def _list_all(list_fn, build_request, get_id):
+    """Page through a ChirpStack List RPC (limit/offset/total_count) until exhausted."""
+    ids = []
+    offset = 0
+    while True:
+        req = build_request(PAGE_SIZE, offset)
+        resp = await list_fn(req, metadata=AUTH_TOKEN)
+        ids.extend(get_id(item) for item in resp.result)
+        offset += len(resp.result)
+        if offset >= resp.total_count or not resp.result:
+            return ids
+
+
 async def get_tenant_list() -> list[str]:
     client = api.TenantServiceStub(await _get_channel())
-    # # Define the API key meta-data.
-    req = api.ListTenantsRequest()
-    req.limit = 1000  # mandatory if you want details.
-    resp = await client.List(req, metadata=AUTH_TOKEN)
-    tenants = [x['id'] for x in MessageToDict(resp)['result']]
-    return tenants
+
+    def build_request(limit, offset):
+        req = api.ListTenantsRequest()
+        req.limit = limit
+        req.offset = offset
+        return req
+
+    return await _list_all(client.List, build_request, lambda item: item.id)
 
 
 async def get_tennant_apps(tenant_id: str) -> list[str]:
     client = api.ApplicationServiceStub(await _get_channel())
-    # # Define the API key meta-data.
-    req = api.ListApplicationsRequest()
-    req.limit = 1000  # mandatory if you want details.
-    req.tenant_id = tenant_id
-    resp = await client.List(req, metadata=AUTH_TOKEN)
-    data = MessageToDict(resp)
-    if data.get('result'):
-        return [x['id'] for x in data['result']]
-    return
+
+    def build_request(limit, offset):
+        req = api.ListApplicationsRequest()
+        req.limit = limit
+        req.offset = offset
+        req.tenant_id = tenant_id
+        return req
+
+    return await _list_all(client.List, build_request, lambda item: item.id)
 
 
 async def get_application_devices(application_id: str) -> list[str]:
     client = api.DeviceServiceStub(await _get_channel())
-    # # Construct request.
-    req = api.ListDevicesRequest()
-    req.limit = 1000  # mandatory if you want details.
-    req.application_id = application_id
-    resp = await client.List(req, metadata=AUTH_TOKEN)
-    devices = MessageToDict(resp)
-    if devices.get('result'):
-        return [x['devEui'] for x in devices['result']]
-    return
+
+    def build_request(limit, offset):
+        req = api.ListDevicesRequest()
+        req.limit = limit
+        req.offset = offset
+        req.application_id = application_id
+        return req
+
+    return await _list_all(client.List, build_request, lambda item: item.dev_eui)
 
 
 async def get_device_data(dev_eui: str, use_cache: bool = True) -> dict:
