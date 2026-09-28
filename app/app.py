@@ -37,6 +37,9 @@ rdb = redis.Redis(connection_pool=rpool, decode_responses=True)
 database = DeviceDatabase()
 deviceredis = DeviceRedis()
 
+SYNC_INTERVAL_MIN = int(os.getenv('SYNC_INTERVAL_MIN_SECONDS', 300))
+SYNC_INTERVAL_MAX = int(os.getenv('SYNC_INTERVAL_MAX_SECONDS', 600))
+
 
 def sleep_time(start, stop, step):
     return random.randrange(start, stop, step)
@@ -64,7 +67,7 @@ async def get_helium_skfs(hpr):
         # update synced helium skfs
         await database.upsert_helium_skfs(skfs)
         # sleeping = sleep_time(3550, 3600, 5)
-        sleeping = sleep_time(300, 600, 5)
+        sleeping = sleep_time(SYNC_INTERVAL_MIN, SYNC_INTERVAL_MAX, 5)
         print(f'{time.ctime()} END HELIUM SKFS: synced {len(skfs)} skfs, sleeping {sleeping}s')
         await asyncio.sleep(sleeping)
 
@@ -93,7 +96,7 @@ async def devices_sync_upsert():
             ))
         await database.upsert_device(devices)
         # sleeping = sleep_time(3550, 3600, 5)
-        sleeping = sleep_time(300, 600, 5)
+        sleeping = sleep_time(SYNC_INTERVAL_MIN, SYNC_INTERVAL_MAX, 5)
         print(f'{time.ctime()} END RUNNING SQLITE DB SYNC: synced {len(devices)} devices, sleeping {sleeping}s')
         await asyncio.sleep(sleeping)
 
@@ -149,7 +152,7 @@ async def sync_session_keys(hpr):
         print(f'{time.ctime()} START RUNNING SKFS PURGE')
         removed = await hpr.remove_stale_skfs()
         # sleeping = sleep_time(43150, 43200, 5)
-        sleeping = sleep_time(300, 600, 5)
+        sleeping = sleep_time(SYNC_INTERVAL_MIN, SYNC_INTERVAL_MAX, 5)
         print(f'{time.ctime()} END RUNNING SKFS PURGE: removed {removed} stale skfs, sleeping {sleeping}s')
         await asyncio.sleep(sleeping)
 
@@ -254,7 +257,13 @@ async def redis_events_streams(reader, hpr, publisher=None):
                     req = MessageToDict(pl, always_print_fields_with_no_presence=True)
 
                     if publisher is not None:
-                        await publish_usage_event(publisher, req, message[0], route_id)
+                        try:
+                            await publish_usage_event(publisher, req, message[0], route_id)
+                        except Exception as exc:
+                            # Best-effort: a dropped accounting event beats stalling
+                            # the whole event pipeline (device/join sync included)
+                            # behind a billing-provider outage.
+                            print(f'[Usage publish failed, dropping event]: {exc}')
 
                     tenant_id = req['deviceInfo']['tenantId']
                     tenant_name = req['deviceInfo']['tenantName']

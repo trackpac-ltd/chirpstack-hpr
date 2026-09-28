@@ -31,7 +31,7 @@ class SqsUsagePublisher:
             request.update(
                 MessageGroupId="HeliumUsageEvents", MessageDeduplicationId=event_id
             )
-        # Let failures propagate: the source stream offset must not advance on failure.
+        # Let failures propagate; the caller decides whether to retry, drop, or log.
         self._client.send_message(**request)
 
     async def close(self):
